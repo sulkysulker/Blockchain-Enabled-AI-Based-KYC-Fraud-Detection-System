@@ -23,6 +23,29 @@ function proposalStatusLabel(statusValue) {
   return map[status] || `Unknown (${status})`;
 }
 
+function normalizeProposal(raw, id, type) {
+  const get = (name, index) => {
+    if (raw?.[name] !== undefined) return raw[name];
+    return raw?.[index];
+  };
+
+  const status = get("status", 9);
+  return {
+    id,
+    type,
+    proposedTarget: type === "issuer" ? get("proposedIssuer", 0) : get("proposedVerifier", 0),
+    proposedBy: get("proposedBy", 1),
+    organizationName: get("organizationName", 2),
+    justification: get("justification", 3),
+    evidenceURI: get("evidenceURI", 4),
+    approvals: get("approvals", 6),
+    rejections: get("rejections", 7),
+    deadline: get("deadline", 8),
+    status,
+    statusLabel: proposalStatusLabel(status)
+  };
+}
+
 function IssuerDashboard({ contract, onTxStatus }) {
   const [activeTab, setActiveTab] = useState("kyc");
   const [identifier, setIdentifier] = useState("");
@@ -38,6 +61,8 @@ function IssuerDashboard({ contract, onTxStatus }) {
   const [proposalType, setProposalType] = useState("issuer");
   const [proposalId, setProposalId] = useState("");
   const [proposalData, setProposalData] = useState(null);
+  const [proposalStatusFilter, setProposalStatusFilter] = useState("all");
+  const [proposalLaneFilter, setProposalLaneFilter] = useState("all");
   const [voteApprove, setVoteApprove] = useState(true);
   const [identifierType, setIdentifierType] = useState("other");
   const [metadataJson, setMetadataJson] = useState('{"country":"IN"}');
@@ -178,10 +203,10 @@ function IssuerDashboard({ contract, onTxStatus }) {
         })
       );
 
-      // Filter valid and active proposals
-      return items.filter(
-        (item) => item !== null && Number(item.status) === 0
-      );
+      // Keep all valid proposals; filter in UI.
+      return items
+        .filter((item) => item !== null)
+        .map((item) => normalizeProposal(item, item.id, type));
     } catch (error) {
       console.error(`Error fetching ${type} proposals:`, error);
       return [];
@@ -206,7 +231,7 @@ function IssuerDashboard({ contract, onTxStatus }) {
 
       if (allProposals.length === 0) {
         setProposals([]);
-        toast.success("No active proposals found");
+        toast.success("No proposals found");
         return;
       }
 
@@ -219,7 +244,7 @@ function IssuerDashboard({ contract, onTxStatus }) {
       });
 
       setProposals(allProposals);
-      toast.success(`Loaded ${issuerProposals.length} issuer + ${verifierProposals.length} verifier active proposal(s)`);
+      toast.success(`Loaded ${issuerProposals.length} issuer + ${verifierProposals.length} verifier proposal(s)`);
     } catch (error) {
       console.error("Load all proposals error:", error);
       toast.error(error?.shortMessage || error?.message || "Unable to load proposals");
@@ -248,6 +273,15 @@ function IssuerDashboard({ contract, onTxStatus }) {
       onTxStatus?.({ state: "error", message: error?.message || "Action failed" });
     }
   }
+
+  const filteredProposals = proposals.filter((item) => {
+    if (proposalStatusFilter === "all") return true;
+    return String(Number(item.status)) === proposalStatusFilter;
+  });
+  const issuerProposals = filteredProposals.filter((p) => p.type === "issuer");
+  const verifierProposals = filteredProposals.filter((p) => p.type === "verifier");
+  const showIssuerLane = proposalLaneFilter === "all" || proposalLaneFilter === "issuer";
+  const showVerifierLane = proposalLaneFilter === "all" || proposalLaneFilter === "verifier";
 
   return (
     <div className="issuer-dashboard">
@@ -650,11 +684,11 @@ function IssuerDashboard({ contract, onTxStatus }) {
             <div className="dashboard-card full-width">
               <div className="card-header">
                 <div className="card-icon">📋</div>
-                <h2 className="card-title">Active Proposals</h2>
-                <span className="card-badge info">{proposals.length} Active</span>
+                <h2 className="card-title">All Proposals</h2>
+                <span className="card-badge info">{filteredProposals.length} Showing</span>
               </div>
 
-              <div className="card-actions ">
+              <div className="card-actions proposal-list-toolbar">
                 <button
                   className="btn-info"
                   onClick={() => wrapAction(handleLoadAllProposals)}
@@ -663,94 +697,107 @@ function IssuerDashboard({ contract, onTxStatus }) {
                   <span className="btn-icon">{loadingProposals ? '⏳' : '🔄'}</span>
                   {loadingProposals ? 'Loading...' : 'Load Proposals'}
                 </button>
+                <select
+                  className="form-select"
+                  value={proposalStatusFilter}
+                  onChange={(e) => setProposalStatusFilter(e.target.value)}
+                  style={{ maxWidth: "220px" }}
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="0">Active</option>
+                  <option value="1">Executed</option>
+                  <option value="2">Rejected</option>
+                  <option value="3">Cancelled</option>
+                  <option value="4">Expired</option>
+                </select>
               </div>
 
-              {proposals.length === 0 ? (
+              <div className="proposal-lane-tabs" role="tablist" aria-label="Proposal type">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={proposalLaneFilter === "all"}
+                  className={`proposal-lane-tab ${proposalLaneFilter === "all" ? "proposal-lane-tab--active" : ""}`}
+                  onClick={() => setProposalLaneFilter("all")}
+                >
+                  All proposals
+                  <span className="proposal-lane-tab__hint">Issuer + Verifier</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={proposalLaneFilter === "issuer"}
+                  className={`proposal-lane-tab proposal-lane-tab--issuer ${proposalLaneFilter === "issuer" ? "proposal-lane-tab--active-issuer" : ""}`}
+                  onClick={() => setProposalLaneFilter("issuer")}
+                >
+                  Issuer only
+                  <span className="proposal-lane-tab__hint">{issuerProposals.length} in view</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={proposalLaneFilter === "verifier"}
+                  className={`proposal-lane-tab proposal-lane-tab--verifier ${proposalLaneFilter === "verifier" ? "proposal-lane-tab--active-verifier" : ""}`}
+                  onClick={() => setProposalLaneFilter("verifier")}
+                >
+                  Verifier only
+                  <span className="proposal-lane-tab__hint">{verifierProposals.length} in view</span>
+                </button>
+              </div>
+
+              {filteredProposals.length === 0 ? (
                 <div className="empty-state">
                   <div className="empty-icon">📭</div>
-                  <p className="empty-text">No active proposals found</p>
-                  <p className="empty-hint">Click "Load Proposals" to fetch the latest proposals</p>
+                  <p className="empty-text">No proposals found for selected status</p>
+                  <p className="empty-hint">Click "Load Proposals" and change status filter</p>
                 </div>
               ) : (
-                <div className="proposals-grid">
-                  {proposals.map((item) => (
-                    <div className="proposal-card" key={`${item.type}-${item.id}`}>
-                      <div className="proposal-header">
-                        <div className="proposal-title-row">
-                          <h3 className="proposal-title">
-                            {item.type === "issuer" ? "🏢" : "🔍"} Proposal #{item.id}
-                          </h3>
-                          <span className={`type-badge ${item.type}`}>
-                            {item.type === "issuer" ? "Issuer" : "Verifier"}
-                          </span>
+                <div
+                  className={`proposals-split ${proposalLaneFilter === "all" ? "proposals-split--two-col" : "proposals-split--single"}`}
+                >
+                  {showIssuerLane && (
+                    <section className="proposals-section proposals-section--issuer proposals-section--standalone" aria-labelledby="issuer-proposals-heading">
+                      <header className="proposals-section__header proposals-section__header--issuer">
+                        <div className="proposals-section__title-wrap">
+                          <span className="proposals-section__eyebrow">Section A</span>
+                          <h3 id="issuer-proposals-heading" className="proposals-section__title">Issuer proposals</h3>
+                          <p className="proposals-section__desc">On-chain votes to add or change issuer roles</p>
                         </div>
-                        <span className={`status-badge status-${item.statusLabel.toLowerCase()}`}>
-                          {item.statusLabel}
-                        </span>
-                      </div>
-
-                      <div className="proposal-content">
-                        <div className="proposal-section-title">Proposal Information</div>
-                        
-                        <div className="proposal-field">
-                          <span className="field-label">Type:</span>
-                          <span className="field-value">{item.type === "issuer" ? "Issuer Proposal" : "Verifier Proposal"}</span>
+                        <span className="proposals-section__count proposals-section__count--issuer">{issuerProposals.length}</span>
+                      </header>
+                      {issuerProposals.length === 0 ? (
+                        <p className="proposals-section__empty">No issuer proposals for this status filter.</p>
+                      ) : (
+                        <div className="proposals-grid proposals-grid--issuer">
+                          {issuerProposals.map((item) => (
+                            <ProposalCard key={`issuer-${item.id}`} item={item} />
+                          ))}
                         </div>
+                      )}
+                    </section>
+                  )}
 
-                        <div className="proposal-field">
-                          <span className="field-label">Target:</span>
-                          <span className="field-value address">
-                            {item.type === "issuer" ? item.proposedIssuer : item.proposedVerifier}
-                          </span>
+                  {showVerifierLane && (
+                    <section className="proposals-section proposals-section--verifier proposals-section--standalone" aria-labelledby="verifier-proposals-heading">
+                      <header className="proposals-section__header proposals-section__header--verifier">
+                        <div className="proposals-section__title-wrap">
+                          <span className="proposals-section__eyebrow">Section B</span>
+                          <h3 id="verifier-proposals-heading" className="proposals-section__title">Verifier proposals</h3>
+                          <p className="proposals-section__desc">On-chain votes to add or change verifier roles</p>
                         </div>
-
-                        <div className="proposal-field">
-                          <span className="field-label">Proposed By:</span>
-                          <span className="field-value address">{item.proposedBy}</span>
+                        <span className="proposals-section__count proposals-section__count--verifier">{verifierProposals.length}</span>
+                      </header>
+                      {verifierProposals.length === 0 ? (
+                        <p className="proposals-section__empty">No verifier proposals for this status filter.</p>
+                      ) : (
+                        <div className="proposals-grid proposals-grid--verifier">
+                          {verifierProposals.map((item) => (
+                            <ProposalCard key={`verifier-${item.id}`} item={item} />
+                          ))}
                         </div>
-
-                        <div className="proposal-field">
-                          <span className="field-label">Organization:</span>
-                          <span className="field-value">{item.organizationName}</span>
-                        </div>
-
-                        <div className="proposal-field">
-                          <span className="field-label">Justification:</span>
-                          <span className="field-value description">{item.justification}</span>
-                        </div>
-
-                        {item.evidenceURI && (
-                          <div className="proposal-field">
-                            <span className="field-label">Evidence:</span>
-                            <a href={item.evidenceURI} target="_blank" rel="noopener noreferrer" className="field-link">
-                              📎 View Evidence
-                            </a>
-                          </div>
-                        )}
-
-                        <div className="proposal-stats">
-                          <div className="stat-item">
-                            <span className="stat-label">✅ Approvals:</span>
-                            <span className="stat-value approve">{String(item.approvals)}</span>
-                          </div>
-                          <div className="stat-item">
-                            <span className="stat-label">❌ Rejections:</span>
-                            <span className="stat-value reject">{String(item.rejections)}</span>
-                          </div>
-                          <div className="stat-item">
-                            <span className="stat-label">⏰ Deadline:</span>
-                            <span className="stat-value">{String(item.deadline)}</span>
-                          </div>
-                        </div>
-
-                        {/* Full Details */}
-                        <details className="proposal-details-toggle">
-                          <summary className="details-summary">📋 View Full Details</summary>
-                          <pre className="data-block details-content">{toDisplayJson(item)}</pre>
-                        </details>
-                      </div>
-                    </div>
-                  ))}
+                      )}
+                    </section>
+                  )}
                 </div>
               )}
             </div>
@@ -760,6 +807,81 @@ function IssuerDashboard({ contract, onTxStatus }) {
     </div>
   );
 
+}
+
+function ProposalCard({ item }) {
+  const isIssuer = item.type === "issuer";
+  const variant = isIssuer ? "issuer" : "verifier";
+  const label = isIssuer ? "Issuer" : "Verifier";
+  const icon = isIssuer ? "🏢" : "🔍";
+
+  return (
+    <article className={`proposal-card proposal-card--${variant}`}>
+      <div className={`proposal-card__accent proposal-card__accent--${variant}`} aria-hidden />
+      <div className="proposal-card__header">
+        <div className="proposal-card__id-block">
+          <span className={`proposal-card__pill proposal-card__pill--${variant}`}>{label}</span>
+          <h4 className="proposal-card__heading">
+            {icon} Proposal #{item.id}
+          </h4>
+        </div>
+        <span className={`status-badge status-${item.statusLabel.toLowerCase()}`}>
+          {item.statusLabel}
+        </span>
+      </div>
+
+      <div className="proposal-card__body">
+        <dl className="proposal-card__meta">
+          <div className="proposal-card__meta-row">
+            <dt>Target</dt>
+            <dd className="proposal-card__mono">{item.proposedTarget || "—"}</dd>
+          </div>
+          <div className="proposal-card__meta-row">
+            <dt>Proposed by</dt>
+            <dd className="proposal-card__mono">{item.proposedBy || "—"}</dd>
+          </div>
+          <div className="proposal-card__meta-row proposal-card__meta-row--full">
+            <dt>Organization</dt>
+            <dd>{item.organizationName || "—"}</dd>
+          </div>
+          <div className="proposal-card__meta-row proposal-card__meta-row--full">
+            <dt>Justification</dt>
+            <dd className="field-value description">{item.justification || "—"}</dd>
+          </div>
+          {item.evidenceURI ? (
+            <div className="proposal-card__meta-row proposal-card__meta-row--full">
+              <dt>Evidence</dt>
+              <dd>
+                <a href={item.evidenceURI} target="_blank" rel="noopener noreferrer" className={`field-link proposal-card__link--${variant}`}>
+                  Open link
+                </a>
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+
+        <div className={`proposal-stats proposal-stats--${variant}`}>
+          <div className="stat-item">
+            <span className="stat-label">Approvals</span>
+            <span className="stat-value approve">{String(item.approvals ?? 0)}</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-label">Rejections</span>
+            <span className="stat-value reject">{String(item.rejections ?? 0)}</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-label">Deadline</span>
+            <span className="stat-value proposal-card__mono">{String(item.deadline ?? "—")}</span>
+          </div>
+        </div>
+
+        <details className="proposal-details-toggle">
+          <summary className="details-summary">Raw proposal data</summary>
+          <pre className="data-block details-content">{toDisplayJson(item)}</pre>
+        </details>
+      </div>
+    </article>
+  );
 }
 
 export default IssuerDashboard;
