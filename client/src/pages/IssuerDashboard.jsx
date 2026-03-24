@@ -11,6 +11,65 @@ function toDisplayJson(value) {
   );
 }
 
+function summarizeKycRecord(raw, queriedHash) {
+  if (!raw) return [];
+
+  const pick = (names, index) => {
+    for (const name of names) {
+      if (raw?.[name] !== undefined) return raw[name];
+    }
+    if (index === undefined || index === null) return undefined;
+    try {
+      if (typeof raw?.length === "number" && (index < 0 || index >= raw.length)) {
+        return undefined;
+      }
+      return raw?.[index];
+    } catch {
+      return undefined;
+    }
+  };
+
+  const formatVerified = (value) => {
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    const numeric = Number(value);
+    if (!Number.isNaN(numeric)) {
+      if (numeric === 1) return "Yes";
+      if (numeric === 0) return "No";
+    }
+    return value;
+  };
+
+  const formatTimestamp = (value) => {
+    if (value === undefined || value === null || value === "") return "—";
+    const numeric = Number(value);
+    if (Number.isNaN(numeric) || numeric <= 0) return String(value);
+    const millis = numeric < 1_000_000_000_000 ? numeric * 1000 : numeric;
+    const date = new Date(millis);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toISOString();
+  };
+
+  const formatValue = (value) => {
+    if (value === undefined || value === null || value === "") return "—";
+    if (typeof value === "bigint") return value.toString();
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    if (typeof value === "object") return toDisplayJson(value);
+    return String(value);
+  };
+
+  const fields = [
+    { label: "Hash", value: pick(["hash", "identifierHash", "userHash", "kycHash"]) ?? queriedHash },
+    { label: "Verified", value: formatVerified(pick(["verified", "isVerified", "status"], 1)) },
+    { label: "Issuer", value: pick(["issuer", "verifiedBy", "updatedBy"], 2) },
+    { label: "Last Updated", value: formatTimestamp(pick(["timestamp", "updatedAt", "lastUpdated"], 3)) },
+    { label: "Exists", value: pick(["exists"], 4) }
+  ];
+
+  return fields
+    .filter((item) => item.value !== undefined)
+    .map((item) => ({ ...item, value: formatValue(item.value) }));
+}
+
 function proposalStatusLabel(statusValue) {
   const status = Number(statusValue);
   const map = {
@@ -67,6 +126,10 @@ function IssuerDashboard({ contract, onTxStatus }) {
   const [identifierType, setIdentifierType] = useState("other");
   const [metadataJson, setMetadataJson] = useState('{"country":"IN"}');
   const [documentFile, setDocumentFile] = useState(null);
+  const [kycRecord, setKycRecord] = useState(null);
+  const [loadingKycRecord, setLoadingKycRecord] = useState(false);
+  const [fraudData, setFraudData] = useState(null);
+  const [loadingFraud, setLoadingFraud] = useState(false);
   const [proposals, setProposals] = useState([]);
   const [loadingProposals, setLoadingProposals] = useState(false);
 
@@ -84,19 +147,61 @@ function IssuerDashboard({ contract, onTxStatus }) {
     toast.success(`KYC added: ${receipt.hash}`);
   }
 
-  async function handleUpdateKYC() {
-    // Some deployed ABI variants expose only addKYC, which behaves as upsert.
-    const txPromise =
-      typeof contract.updateKYC === "function"
-        ? contract.updateKYC(kycHash, verified)
-        : contract.addKYC(kycHash, verified);
-    const receipt = await sendTx(txPromise, onTxStatus);
-    toast.success(`KYC updated: ${receipt.hash}`);
+  async function handleGetKYC() {
+    setLoadingKycRecord(true);
+    try {
+      const result = await contract.getKYC(kycHash);
+      setKycRecord(result);
+      // Log access automatically for compliance
+      try {
+        await contract.logAccess(kycHash);
+      } catch (error) {
+        console.warn("Access log failed silently:", error?.message);
+      }
+      toast.success("KYC record loaded successfully");
+    } finally {
+      setLoadingKycRecord(false);
+    }
+  }
+
+  async function handleCheckFraud() {
+    setLoadingFraud(true);
+    try {
+      const result = await contract.getFraud(kycHash);
+      // Convert Result object to plain object, handling both numeric indices and named properties
+      const fraudReport = {
+        score: result?.score !== undefined ? Number(result.score) : (result?.[0] !== undefined ? Number(result[0]) : null),
+        reason: result?.reason !== undefined ? result.reason : (result?.[1] !== undefined ? result[1] : "")
+      };
+      setFraudData(fraudReport);
+      // Log access automatically for compliance
+      try {
+        await contract.logAccess(kycHash);
+      } catch (error) {
+        console.warn("Access log failed silently:", error?.message);
+      }
+      toast.success("Fraud data loaded successfully");
+    } catch (error) {
+      toast.error(error?.message || "Unable to fetch fraud data");
+    } finally {
+      setLoadingFraud(false);
+    }
   }
 
   async function handleReportFraud() {
     const score = Number(fraudScore);
     if (score < 0 || score > 100) throw new Error("Fraud score must be between 0 and 100.");
+    
+    // Verify KYC record exists before reporting fraud
+    try {
+      const kycRecord = await contract.getKYC(kycHash);
+      if (!kycRecord) {
+        throw new Error("KYC record does not exist for this identifier.");
+      }
+    } catch (error) {
+      throw new Error(`Cannot report fraud: KYC record not found for this identifier. ${error?.message || ""}`);
+    }
+    
     const receipt = await sendTx(contract.reportFraud(kycHash, score, fraudReason), onTxStatus);
     await mirrorFraudReport({
       hash: kycHash,
@@ -282,6 +387,7 @@ function IssuerDashboard({ contract, onTxStatus }) {
   const verifierProposals = filteredProposals.filter((p) => p.type === "verifier");
   const showIssuerLane = proposalLaneFilter === "all" || proposalLaneFilter === "issuer";
   const showVerifierLane = proposalLaneFilter === "all" || proposalLaneFilter === "verifier";
+  const kycRecordSummary = summarizeKycRecord(kycRecord, kycHash);
 
   return (
     <div className="issuer-dashboard">
@@ -417,11 +523,38 @@ function IssuerDashboard({ contract, onTxStatus }) {
                   <span className="btn-icon">➕</span>
                   Add KYC Record
                 </button>
-                <button className="btn-secondary" onClick={() => wrapAction(handleUpdateKYC)}>
-                  <span className="btn-icon">🔄</span>
-                  Update KYC Record
+                <button
+                  className="btn-info"
+                  onClick={() => wrapAction(handleGetKYC)}
+                  disabled={loadingKycRecord}
+                >
+                  <span className="btn-icon">{loadingKycRecord ? '⏳' : '🔍'}</span>
+                  {loadingKycRecord ? 'Loading...' : 'Get KYC Record'}
                 </button>
               </div>
+
+              {kycRecord && (
+                <div className="data-display">
+                  <h3 className="data-title">On-Chain KYC Record</h3>
+                  <div className="data-block">
+                    {kycRecordSummary.length ? (
+                      kycRecordSummary.map((item) => (
+                        <div key={item.label}>
+                          <strong>{item.label}:</strong> {item.value}
+                        </div>
+                      ))
+                    ) : (
+                      <div>No labeled fields detected for this contract response.</div>
+                    )}
+                  </div>
+                  <div className="card-actions">
+                    <button className="btn-secondary" onClick={() => setKycRecord(null)}>
+                      <span className="btn-icon">🧹</span>
+                      Clear Result
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -480,7 +613,7 @@ function IssuerDashboard({ contract, onTxStatus }) {
 
               <div className="form-group">
                 <label className="form-label">
-                  <span className="label-icon">📝</span>
+                  <span className="label-icon">💬</span>
                   Fraud Reason
                 </label>
                 <textarea
@@ -493,11 +626,53 @@ function IssuerDashboard({ contract, onTxStatus }) {
               </div>
 
               <div className="card-actions">
+                <button
+                  className="btn-info"
+                  onClick={() => wrapAction(handleCheckFraud)}
+                  disabled={loadingFraud}
+                >
+                  <span className="btn-icon">{loadingFraud ? '⏳' : '🔍'}</span>
+                  {loadingFraud ? 'Loading...' : 'Check Fraud Status'}
+                </button>
                 <button className="btn-danger" onClick={() => wrapAction(handleReportFraud)}>
                   <span className="btn-icon">🚨</span>
                   Report Fraud
                 </button>
               </div>
+
+              {fraudData && (
+                <div className="data-display">
+                  <h3 className="data-title">Fraud Report</h3>
+                  <div className="data-block">
+                    {fraudData.score !== undefined && (
+                      <div>
+                        <strong>Risk Score:</strong> {fraudData.score}/100
+                        <div className="score-bar" style={{ marginTop: '8px', marginBottom: '8px' }}>
+                          <div
+                            className="score-fill"
+                            style={{
+                              width: `${fraudData.score}%`,
+                              backgroundColor: fraudData.score > 70 ? '#ef4444' : fraudData.score > 40 ? '#fbbf24' : '#22c55e',
+                              height: '8px'
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+                    )}
+                    {fraudData.reason && (
+                      <div style={{ marginTop: '12px' }}>
+                        <strong>Reason:</strong> {fraudData.reason}
+                      </div>
+                    )}
+                  </div>
+                  <div className="card-actions">
+                    <button className="btn-secondary" onClick={() => setFraudData(null)}>
+                      <span className="btn-icon">🧹</span>
+                      Clear Result
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

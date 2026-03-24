@@ -1,7 +1,6 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { hashIdentifier, sendTx } from "../utils/contract";
-import { getOffChainKyc } from "../utils/api";
 
 function toDisplayJson(value) {
   return JSON.stringify(
@@ -11,17 +10,76 @@ function toDisplayJson(value) {
   );
 }
 
+function summarizeKycRecord(raw, queriedHash) {
+  if (!raw) return [];
+
+  const pick = (names, index) => {
+    for (const name of names) {
+      if (raw?.[name] !== undefined) return raw[name];
+    }
+    if (index === undefined || index === null) return undefined;
+    try {
+      if (typeof raw?.length === "number" && (index < 0 || index >= raw.length)) {
+        return undefined;
+      }
+      return raw?.[index];
+    } catch {
+      return undefined;
+    }
+  };
+
+  const formatVerified = (value) => {
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    const numeric = Number(value);
+    if (!Number.isNaN(numeric)) {
+      if (numeric === 1) return "Yes";
+      if (numeric === 0) return "No";
+    }
+    return value;
+  };
+
+  const formatTimestamp = (value) => {
+    if (value === undefined || value === null || value === "") return "—";
+    const numeric = Number(value);
+    if (Number.isNaN(numeric) || numeric <= 0) return String(value);
+    const millis = numeric < 1_000_000_000_000 ? numeric * 1000 : numeric;
+    const date = new Date(millis);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toISOString();
+  };
+
+  const formatValue = (value) => {
+    if (value === undefined || value === null || value === "") return "—";
+    if (typeof value === "bigint") return value.toString();
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    if (typeof value === "object") return toDisplayJson(value);
+    return String(value);
+  };
+
+  const fields = [
+    { label: "Hash", value: pick(["hash", "identifierHash", "userHash", "kycHash"]) ?? queriedHash },
+    { label: "Verified", value: formatVerified(pick(["verified", "isVerified", "status"], 1)) },
+    { label: "Issuer", value: pick(["issuer", "verifiedBy", "updatedBy"], 2) },
+    { label: "Last Updated", value: formatTimestamp(pick(["timestamp", "updatedAt", "lastUpdated"], 3)) },
+    { label: "Exists", value: pick(["exists"], 4) }
+  ];
+
+  return fields
+    .filter((item) => item.value !== undefined)
+    .map((item) => ({ ...item, value: formatValue(item.value) }));
+}
+
 function VerifierDashboard({ contract, onTxStatus }) {
   const [identifier, setIdentifier] = useState("");
   const [kycData, setKycData] = useState(null);
   const [fraudData, setFraudData] = useState(null);
   const [accessLogs, setAccessLogs] = useState(null);
-  const [offChainData, setOffChainData] = useState(null);
   const [activeTab, setActiveTab] = useState('kyc');
   const [loadingKyc, setLoadingKyc] = useState(false);
   const [loadingFraud, setLoadingFraud] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState(false);
-  const [loadingOffChain, setLoadingOffChain] = useState(false);
+  const queriedHash = identifier.trim() ? hashIdentifier(identifier) : "";
+  const kycSummary = summarizeKycRecord(kycData, queriedHash);
 
   function getHash() {
     return hashIdentifier(identifier);
@@ -33,6 +91,12 @@ function VerifierDashboard({ contract, onTxStatus }) {
       const hash = getHash();
       const result = await contract.getKYC(hash);
       setKycData(result);
+      // Log access automatically for compliance
+      try {
+        await contract.logAccess(hash);
+      } catch (error) {
+        console.warn("Access log failed silently:", error?.message);
+      }
       toast.success("KYC data loaded successfully");
     } catch (error) {
       toast.error(error?.message || "Unable to fetch KYC");
@@ -68,26 +132,24 @@ function VerifierDashboard({ contract, onTxStatus }) {
     }
   }
 
-  async function handleViewOffChainKyc() {
-    try {
-      setLoadingOffChain(true);
-      const hash = getHash();
-      const data = await getOffChainKyc(hash);
-      setOffChainData(data);
-      toast.success("Off-chain KYC data loaded successfully");
-    } catch (error) {
-      toast.error(error?.response?.data?.message || error?.message || "Unable to fetch off-chain KYC");
-    } finally {
-      setLoadingOffChain(false);
-    }
-  }
 
   async function handleViewFraud() {
     try {
       setLoadingFraud(true);
       const hash = getHash();
-      const fraud = await contract.getFraud(hash);
-      setFraudData(fraud);
+      const result = await contract.getFraud(hash);
+      // Convert Result object to plain object, handling both numeric indices and named properties
+      const fraudReport = {
+        score: result?.score !== undefined ? Number(result.score) : (result?.[0] !== undefined ? Number(result[0]) : null),
+        reason: result?.reason !== undefined ? result.reason : (result?.[1] !== undefined ? result[1] : "")
+      };
+      setFraudData(fraudReport);
+      // Log access automatically for compliance
+      try {
+        await contract.logAccess(hash);
+      } catch (error) {
+        console.warn("Access log failed silently:", error?.message);
+      }
       toast.success("Fraud data loaded successfully");
     } catch (error) {
       toast.error(error?.message || "Unable to fetch fraud data");
@@ -167,31 +229,26 @@ function VerifierDashboard({ contract, onTxStatus }) {
                   <span className="btn-icon">{loadingKyc ? '⏳' : '📋'}</span>
                   {loadingKyc ? 'Loading...' : 'View KYC Record'}
                 </button>
-                <button
-                  className="btn-info"
-                  onClick={handleViewOffChainKyc}
-                  disabled={loadingOffChain || !identifier.trim()}
-                >
-                  <span className="btn-icon">{loadingOffChain ? '⏳' : '🔗'}</span>
-                  {loadingOffChain ? 'Loading...' : 'View Off-chain Data'}
-                </button>
               </div>
 
               {kycData && (
                 <div className="data-display">
                   <h3 className="data-title">On-Chain KYC Record</h3>
-                  <pre className="data-block">{toDisplayJson(kycData)}</pre>
+                  <div className="data-block">
+                    {kycSummary.length ? (
+                      kycSummary.map((item) => (
+                        <div key={item.label}>
+                          <strong>{item.label}:</strong> {item.value}
+                        </div>
+                      ))
+                    ) : (
+                      <div>No labeled fields detected for this contract response.</div>
+                    )}
+                  </div>
                 </div>
               )}
 
-              {offChainData && (
-                <div className="data-display">
-                  <h3 className="data-title">Off-Chain KYC Metadata</h3>
-                  <pre className="data-block">{toDisplayJson(offChainData)}</pre>
-                </div>
-              )}
-
-              {!kycData && !offChainData && (
+              {!kycData && (
                 <div className="empty-state">
                   <div className="empty-icon">📭</div>
                   <p className="empty-text">No KYC data loaded</p>
@@ -302,14 +359,6 @@ function VerifierDashboard({ contract, onTxStatus }) {
                 >
                   <span className="btn-icon">{loadingLogs ? '⏳' : '📜'}</span>
                   {loadingLogs ? 'Loading...' : 'View Access Logs'}
-                </button>
-                <button
-                  className="btn-secondary"
-                  onClick={handleLogAccess}
-                  disabled={!identifier.trim()}
-                >
-                  <span className="btn-icon">✅</span>
-                  Log My Access
                 </button>
               </div>
 

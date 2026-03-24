@@ -19,7 +19,11 @@ export async function uploadKyc(req, res) {
 
     let ipfsCid = "";
     if (req.file) {
-      ipfsCid = await uploadToPinata(req.file);
+      try {
+        ipfsCid = await uploadToPinata(req.file);
+      } catch (uploadError) {
+        console.warn(`IPFS upload failed, saving record without document: ${uploadError.message}`);
+      }
     }
 
     const record = await KycRecord.findOneAndUpdate(
