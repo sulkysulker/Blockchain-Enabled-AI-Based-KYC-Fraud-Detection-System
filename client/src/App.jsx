@@ -14,6 +14,7 @@ import {
   SEPOLIA_CHAIN_ID_HEX,
   switchToSepolia
 } from "./utils/connectWallet";
+import NasaParticles from "./components/Nasa";
 
 const ROLE_KEYS = ["admin", "issuer", "verifier"];
 
@@ -183,6 +184,7 @@ function App() {
 
   return (
     <main className="app-shell">
+    <NasaParticles />
       <WalletBar
         account={account}
         roleLabel={loadingRoles ? "Loading..." : roleLabel}
