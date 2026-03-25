@@ -5,6 +5,8 @@ import TxStatus from "./components/TxStatus";
 import AdminDashboard from "./pages/AdminDashboard";
 import IssuerDashboard from "./pages/IssuerDashboard";
 import VerifierDashboard from "./pages/VerifierDashboard";
+import LandingPage from "./pages/LandingPage";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { getContract } from "./utils/contract";
 import {
   connectWallet,
@@ -182,33 +184,44 @@ function App() {
   const roleLabel = getRoleLabel(roles);
   const isSepolia = chainId.toLowerCase() === SEPOLIA_CHAIN_ID_HEX;
 
+  const walletProps = {
+    account,
+    roleLabel: loadingRoles ? "Loading..." : roleLabel,
+    chainId,
+    onConnect: handleConnect,
+    onSwitchNetwork: handleSwitchNetwork
+  };
+
   return (
-    <main className="app-shell">
-    <NasaParticles />
-      <WalletBar
-        account={account}
-        roleLabel={loadingRoles ? "Loading..." : roleLabel}
-        chainId={chainId}
-        onConnect={handleConnect}
-        onSwitchNetwork={handleSwitchNetwork}
-      />
-
-      <TxStatus txStatus={txStatus} />
-
-      {!account && <p className="notice">Connect MetaMask to continue.</p>}
-      {account && !isSepolia && <p className="notice error">Please switch to Sepolia network.</p>}
-
-      {account && isSepolia && contract && (
-        <>
-          {roles.admin && <AdminDashboard contract={contract} onTxStatus={setTxStatus} />}
-          {roles.issuer && <IssuerDashboard contract={contract} onTxStatus={setTxStatus} />}
-          {roles.verifier && <VerifierDashboard contract={contract} onTxStatus={setTxStatus} />}
-          {!roles.admin && !roles.issuer && !roles.verifier && (
-            <p className="notice">Wallet connected, but no role is assigned in contract.</p>
-          )}
-        </>
-      )}
-    </main>
+    <Router>
+      <Routes>
+        <Route 
+          path="/" 
+          element={
+            <LandingPage account={account} walletProps={walletProps}>
+              {account && (
+                <div id="dashboard-section" style={{ padding: '0 2rem', maxWidth: '1400px', margin: '0 auto', paddingBottom: '4rem' }}>
+                  {!isSepolia ? (
+                    <div className="notice error page-notice" style={{ marginTop: "5vh", marginInline: "auto", maxWidth: "400px" }}>Please switch to Sepolia network to access the dashboard.</div>
+                  ) : !contract ? (
+                    <div className="notice page-notice" style={{ marginTop: "5vh", marginInline: "auto", maxWidth: "400px" }}>Initializing contract...</div>
+                  ) : roles.admin ? (
+                    <AdminDashboard contract={contract} onTxStatus={setTxStatus} walletProps={walletProps} txStatus={txStatus} />
+                  ) : roles.issuer ? (
+                    <IssuerDashboard contract={contract} onTxStatus={setTxStatus} walletProps={walletProps} txStatus={txStatus} />
+                  ) : roles.verifier ? (
+                    <VerifierDashboard contract={contract} onTxStatus={setTxStatus} walletProps={walletProps} txStatus={txStatus} />
+                  ) : (
+                    <div className="notice page-notice" style={{ marginTop: "5vh", marginInline: "auto", maxWidth: "400px" }}>Wallet connected, but no role is assigned in contract.</div>
+                  )}
+                </div>
+              )}
+            </LandingPage>
+          } 
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Router>
   );
 }
 

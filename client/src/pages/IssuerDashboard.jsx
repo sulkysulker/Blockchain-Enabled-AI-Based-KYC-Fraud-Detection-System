@@ -2,6 +2,30 @@ import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { hashIdentifier, sendTx } from "../utils/contract";
 import { mirrorFraudReport, uploadKycMetadata } from "../utils/api";
+import { 
+  Building, 
+  ClipboardList, 
+  AlertTriangle, 
+  Scale, 
+  User, 
+  Lock, 
+  CheckCircle, 
+  Tag, 
+  FileText, 
+  Paperclip,
+  Plus,
+  Search,
+  MessageSquare,
+  FileCode,
+  Landmark,
+  Target,
+  Link as LinkIcon,
+  Vote,
+  RefreshCw,
+  Eraser,
+  UserPlus
+} from "lucide-react";
+import DashboardLayout from "../layouts/DashboardLayout";
 
 function toDisplayJson(value) {
   return JSON.stringify(
@@ -105,8 +129,11 @@ function normalizeProposal(raw, id, type) {
   };
 }
 
-function IssuerDashboard({ contract, onTxStatus }) {
+function IssuerDashboard({ contract, onTxStatus, walletProps, txStatus }) {
   const [activeTab, setActiveTab] = useState("kyc");
+  const [kycSubTab, setKycSubTab] = useState("register");
+  const [fraudSubTab, setFraudSubTab] = useState("check");
+  const [govSubTab, setGovSubTab] = useState("vote");
   const [identifier, setIdentifier] = useState("");
   const [verified, setVerified] = useState(true);
   const [fraudScore, setFraudScore] = useState(0);
@@ -389,305 +416,401 @@ function IssuerDashboard({ contract, onTxStatus }) {
   const showVerifierLane = proposalLaneFilter === "all" || proposalLaneFilter === "verifier";
   const kycRecordSummary = summarizeKycRecord(kycRecord, kycHash);
 
+  const sidebarItems = [
+    { id: 'kyc', label: 'KYC Management', icon: ClipboardList },
+    { id: 'fraud', label: 'Fraud Reporting', icon: AlertTriangle },
+    { id: 'governance', label: 'Governance', icon: Scale },
+  ];
+
   return (
-    <div className="issuer-dashboard">
-      <div className="dashboard-header">
-        <div className="header-content">
-          <div className="header-icon">🏢</div>
-          <div>
-            <h1 className="dashboard-title">Issuer Dashboard</h1>
-            <p className="dashboard-subtitle">Manage KYC records, report fraud, and participate in governance</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Tab Navigation */}
-      <div className="tab-navigation">
-        <button
-          className={`tab-button ${activeTab === 'kyc' ? 'active' : ''}`}
-          onClick={() => setActiveTab('kyc')}
-        >
-          <span className="tab-icon">📋</span>
-          KYC Management
-        </button>
-        <button
-          className={`tab-button ${activeTab === 'fraud' ? 'active' : ''}`}
-          onClick={() => setActiveTab('fraud')}
-        >
-          <span className="tab-icon">🚨</span>
-          Fraud Reporting
-        </button>
-        <button
-          className={`tab-button ${activeTab === 'governance' ? 'active' : ''}`}
-          onClick={() => setActiveTab('governance')}
-        >
-          <span className="tab-icon">⚖️</span>
-          Governance
-        </button>
-      </div>
-
-      {/* Tab Content */}
-      <div className="tab-content">
+    <DashboardLayout 
+      sidebarItems={sidebarItems} 
+      activeTab={activeTab} 
+      onTabChange={setActiveTab}
+      walletProps={walletProps}
+    >
+      <div className="tab-content slide-up">
         {activeTab === 'kyc' && (
-          <div className="dashboard-card">
-            <div className="card-header">
-              <div className="card-icon">📋</div>
-              <h2 className="card-title">KYC Management</h2>
-              <span className="card-badge core">Active</span>
+          <div className="cyber-card">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1.25rem', marginBottom: "1.5rem", borderBottom: "1px solid var(--border-muted)", paddingBottom: "1.5rem" }}>
+              <div className="card-icon" style={{ color: '#3b82f6', background: 'rgba(59, 130, 246, 0.1)', padding: '0.75rem', borderRadius: '12px' }}><ClipboardList size={32} /></div>
+              <div style={{ flexGrow: 1 }}>
+                <h2 className="cyber-heading">KYC Management</h2>
+                <p className="cyber-subheading" style={{ marginBottom: 0 }}>Add, search, and manage user identity records securely on the VeriChain network.</p>
+              </div>
+              <span className="cyber-badge success">Active Node</span>
             </div>
 
-            <div className="form-section">
-              <div className="form-group">
-                <label className="form-label">
-                  <span className="label-icon">👤</span>
-                  User Identifier
-                </label>
-                <input
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="Enter email or government ID"
-                  className="form-input"
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">
-                  <span className="label-icon">🔒</span>
-                  Hashed Identifier
-                </label>
-                <input value={kycHash} readOnly className="form-input readonly" />
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">
-                    <span className="label-icon">✅</span>
-                    Verification Status
-                  </label>
-                  <select
-                    value={verified ? "true" : "false"}
-                    onChange={(e) => setVerified(e.target.value === "true")}
-                    className="form-select"
-                  >
-                    <option value="true">✅ Verified</option>
-                    <option value="false">❌ Not Verified</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">
-                    <span className="label-icon">🏷️</span>
-                    Identifier Type
-                  </label>
-                  <select
-                    value={identifierType}
-                    onChange={(e) => setIdentifierType(e.target.value)}
-                    className="form-select"
-                  >
-                    <option value="email">📧 Email</option>
-                    <option value="id">🆔 Government ID</option>
-                    <option value="other">📄 Other</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">
-                  <span className="label-icon">📊</span>
-                  Metadata JSON
-                </label>
-                <textarea
-                  value={metadataJson}
-                  onChange={(e) => setMetadataJson(e.target.value)}
-                  placeholder='{"country":"IN", "region":"Maharashtra"}'
-                  className="form-textarea"
-                  rows="3"
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">
-                  <span className="label-icon">📎</span>
-                  KYC Document (IPFS)
-                </label>
-                <input
-                  type="file"
-                  onChange={(e) => setDocumentFile(e.target.files?.[0] || null)}
-                  className="form-file"
-                  accept=".pdf,.jpg,.jpeg,.png"
-                />
-              </div>
-
-              <div className="card-actions">
-                <button className="btn-primary" onClick={() => wrapAction(handleAddKYC)}>
-                  <span className="btn-icon">➕</span>
-                  Add KYC Record
-                </button>
-                <button
-                  className="btn-info"
-                  onClick={() => wrapAction(handleGetKYC)}
-                  disabled={loadingKycRecord}
-                >
-                  <span className="btn-icon">{loadingKycRecord ? '⏳' : '🔍'}</span>
-                  {loadingKycRecord ? 'Loading...' : 'Get KYC Record'}
-                </button>
-              </div>
-
-              {kycRecord && (
-                <div className="data-display">
-                  <h3 className="data-title">On-Chain KYC Record</h3>
-                  <div className="data-block">
-                    {kycRecordSummary.length ? (
-                      kycRecordSummary.map((item) => (
-                        <div key={item.label}>
-                          <strong>{item.label}:</strong> {item.value}
-                        </div>
-                      ))
-                    ) : (
-                      <div>No labeled fields detected for this contract response.</div>
-                    )}
-                  </div>
-                  <div className="card-actions">
-                    <button className="btn-secondary" onClick={() => setKycRecord(null)}>
-                      <span className="btn-icon">🧹</span>
-                      Clear Result
-                    </button>
-                  </div>
-                </div>
-              )}
+            <div className="horizontal-tabs" style={{ marginBottom: '2.5rem', display: 'inline-flex', padding: '0.5rem', background: 'rgba(0,0,0,0.4)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <button 
+                className={`horizontal-tab ${kycSubTab === 'register' ? 'active' : ''}`}
+                onClick={() => setKycSubTab('register')}
+                style={{ padding: '0.6rem 1.2rem', fontSize: '0.95rem' }}
+              >
+                <UserPlus className="tab-icon" size={18} /> Register Identity
+              </button>
+              <button 
+                className={`horizontal-tab ${kycSubTab === 'lookup' ? 'active' : ''}`}
+                onClick={() => setKycSubTab('lookup')}
+                style={{ padding: '0.6rem 1.2rem', fontSize: '0.95rem' }}
+              >
+                <Search className="tab-icon" size={18} /> Lookup Identity
+              </button>
             </div>
+
+            {kycSubTab === 'register' && (
+              <div className="form-section slide-up">
+                <div className="form-group">
+                  <label className="form-label">
+                    <span className="label-icon"><User size={16} /></span>
+                    User Identifier
+                  </label>
+                  <input
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="Enter email or government ID"
+                    className="neon-input"
+                  />
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">
+                      <span className="label-icon"><CheckCircle size={16} /></span>
+                      Verification Status
+                    </label>
+                    <select
+                      value={verified ? "true" : "false"}
+                      onChange={(e) => setVerified(e.target.value === "true")}
+                      className="neon-input"
+                    >
+                      <option value="true">Verified</option>
+                      <option value="false">Not Verified</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">
+                      <span className="label-icon">🏷️</span>
+                      Identifier Type
+                    </label>
+                    <select
+                      value={identifierType}
+                      onChange={(e) => setIdentifierType(e.target.value)}
+                      className="neon-input"
+                    >
+                      <option value="email">Email</option>
+                      <option value="id">Government ID</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    <span className="label-icon"><FileText size={16} /></span>
+                    Metadata JSON
+                  </label>
+                  <textarea
+                    value={metadataJson}
+                    onChange={(e) => setMetadataJson(e.target.value)}
+                    placeholder='{"country":"IN", "region":"Maharashtra"}'
+                    className="form-textarea neon-input"
+                    rows="3"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    <span className="label-icon"><Paperclip size={16} /></span>
+                    KYC Document (IPFS)
+                  </label>
+                  <input
+                    type="file"
+                    onChange={(e) => setDocumentFile(e.target.files?.[0] || null)}
+                    className="form-file neon-input"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    style={{ background: 'rgba(0,0,0,0.3)', padding: '0.6rem' }}
+                  />
+                </div>
+
+                <div className="card-actions" style={{ marginTop: '2rem' }}>
+                  <button className="cyber-button" onClick={() => wrapAction(handleAddKYC)} style={{ width: '100%', justifyContent: 'center' }}>
+                    <span className="btn-icon"><Plus size={16} /></span>
+                    Add KYC Record
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {kycSubTab === 'lookup' && (
+              <div className="form-section slide-up">
+                <div className="form-group">
+                  <label className="form-label">
+                    <span className="label-icon"><Search size={16} /></span>
+                    Search Identifier
+                  </label>
+                  <input
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="Enter identifier to lookup"
+                    className="neon-input"
+                  />
+                  <small style={{ color: 'var(--text-muted)', marginTop: '0.5rem', display: 'block' }}>Changes here sync with the registration form.</small>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    <span className="label-icon"><Lock size={16} /></span>
+                    Computed Keccak256 Hash
+                  </label>
+                  <input value={kycHash} readOnly className="neon-input" style={{ opacity: 0.6 }} />
+                </div>
+                
+                <div className="card-actions" style={{ marginTop: '2rem' }}>
+                  <button
+                    className="cyber-button"
+                    onClick={() => wrapAction(handleGetKYC)}
+                    disabled={loadingKycRecord}
+                    style={{ width: '100%', justifyContent: 'center' }}
+                  >
+                    <span className="btn-icon">{loadingKycRecord ? <RefreshCw size={16} /> : <Search size={16} />}</span>
+                    {loadingKycRecord ? 'Loading...' : 'Query Blockchain Record'}
+                  </button>
+                </div>
+
+                {kycRecord && (
+                  <div className="data-display slide-up" style={{ marginTop: '2rem', background: 'var(--bg-elevated)', borderRadius: '12px', padding: '1.5rem', border: '1px solid var(--border-neon)' }}>
+                    <h3 className="data-title" style={{ color: 'var(--accent-cyan)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <CheckCircle size={18} /> Record Retrieved
+                    </h3>
+                    <div className="data-block" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {kycRecordSummary.length ? (
+                        kycRecordSummary.map((item) => (
+                          <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-muted)', paddingBottom: '0.5rem' }}>
+                            <span style={{ color: 'var(--text-secondary)' }}>{item.label}:</span>
+                            <span className={item.label === 'Hash' || item.label === 'Issuer' ? 'mono-value' : ''} style={{ fontWeight: 600, color: 'var(--text-primary)', textAlign: 'right', maxWidth: '60%', wordBreak: 'break-all' }}>
+                              {item.value}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ color: 'var(--accent-rose)' }}>No valid data found on-chain.</div>
+                      )}
+                    </div>
+                    <div className="card-actions" style={{ marginTop: '1.5rem' }}>
+                      <button className="cyber-button" onClick={() => setKycRecord(null)} style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
+                        <span className="btn-icon"><RefreshCw size={16} /></span> Clear Output
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
         {activeTab === 'fraud' && (
-          <div className="dashboard-card">
-            <div className="card-header">
-              <div className="card-icon">🚨</div>
-              <h2 className="card-title">Fraud Reporting</h2>
-              <span className="card-badge danger">Alert</span>
+          <div className="cyber-card">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1.25rem', marginBottom: "2rem", borderBottom: "1px solid var(--border-muted)", paddingBottom: "1.5rem" }}>
+              <div className="card-icon" style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem', borderRadius: '12px' }}><AlertTriangle size={32} /></div>
+              <div style={{ flexGrow: 1 }}>
+                <h2 className="cyber-heading">Fraud Reporting</h2>
+                <p className="cyber-subheading">Identify and flag suspicious on-chain behavior associated with KYC records.</p>
+              </div>
+              <span className="cyber-badge warning">High Priority</span>
             </div>
 
-            <div className="form-section">
-              <div className="form-group">
-                <label className="form-label">
-                  <span className="label-icon">👤</span>
-                  User Identifier
-                </label>
-                <input
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="Enter email or government ID"
-                  className="form-input"
-                />
-              </div>
+            <div className="horizontal-tabs" style={{ marginBottom: '2.5rem', display: 'inline-flex', padding: '0.5rem', background: 'rgba(0,0,0,0.4)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <button 
+                className={`horizontal-tab ${fraudSubTab === 'check' ? 'active' : ''}`}
+                onClick={() => setFraudSubTab('check')}
+                style={{ padding: '0.6rem 1.2rem', fontSize: '0.95rem' }}
+              >
+                <Search className="tab-icon" size={18} /> Check Fraud Status
+              </button>
+              <button 
+                className={`horizontal-tab ${fraudSubTab === 'report' ? 'active' : ''}`}
+                onClick={() => setFraudSubTab('report')}
+                style={{ padding: '0.6rem 1.2rem', fontSize: '0.95rem' }}
+              >
+                <AlertTriangle className="tab-icon" size={18} /> Report Fraud
+              </button>
+            </div>
 
-              <div className="form-group">
-                <label className="form-label">
-                  <span className="label-icon">📈</span>
-                  Fraud Score (0-100)
-                </label>
-                <input
-                  type="number"
-                  value={fraudScore}
-                  onChange={(e) => setFraudScore(e.target.value)}
-                  min="0"
-                  max="100"
-                  className="form-input"
-                  placeholder="Enter risk score"
-                />
-                <div className="input-hint">
-                  <div className="score-indicator">
-                    <div className="score-bar">
-                      <div
-                        className="score-fill"
-                        style={{
-                          width: `${fraudScore}%`,
-                          backgroundColor: fraudScore > 70 ? '#ef4444' : fraudScore > 40 ? '#fbbf24' : '#22c55e'
-                        }}
-                      ></div>
-                    </div>
-                    <span className="score-text">{fraudScore}/100</span>
-                  </div>
+            {fraudSubTab === 'check' && (
+              <div className="form-section slide-up">
+                <div className="form-group">
+                  <label className="form-label">
+                    <span className="label-icon"><User size={16} /></span>
+                    Target Identifier
+                  </label>
+                  <input
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="Enter email or government ID"
+                    className="neon-input"
+                  />
+                  <small style={{ color: 'var(--text-muted)', marginTop: '0.5rem', display: 'block' }}>Changes here sync with the reporting form.</small>
                 </div>
-              </div>
+                
+                <div className="card-actions" style={{ marginTop: '2rem' }}>
+                  <button
+                    className="cyber-button"
+                    onClick={() => wrapAction(handleCheckFraud)}
+                    disabled={loadingFraud}
+                    style={{ width: '100%', justifyContent: 'center' }}
+                  >
+                    <span className="btn-icon">{loadingFraud ? <RefreshCw size={16} /> : <Search size={16} />}</span>
+                    {loadingFraud ? 'Loading...' : 'Query Blockchain Status'}
+                  </button>
+                </div>
 
-              <div className="form-group">
-                <label className="form-label">
-                  <span className="label-icon">💬</span>
-                  Fraud Reason
-                </label>
-                <textarea
-                  value={fraudReason}
-                  onChange={(e) => setFraudReason(e.target.value)}
-                  placeholder="Describe suspicious behavior, unusual patterns, or evidence of fraud..."
-                  className="form-textarea"
-                  rows="4"
-                />
-              </div>
-
-              <div className="card-actions">
-                <button
-                  className="btn-info"
-                  onClick={() => wrapAction(handleCheckFraud)}
-                  disabled={loadingFraud}
-                >
-                  <span className="btn-icon">{loadingFraud ? '⏳' : '🔍'}</span>
-                  {loadingFraud ? 'Loading...' : 'Check Fraud Status'}
-                </button>
-                <button className="btn-danger" onClick={() => wrapAction(handleReportFraud)}>
-                  <span className="btn-icon">🚨</span>
-                  Report Fraud
-                </button>
-              </div>
-
-              {fraudData && (
-                <div className="data-display">
-                  <h3 className="data-title">Fraud Report</h3>
-                  <div className="data-block">
-                    {fraudData.score !== undefined && (
-                      <div>
-                        <strong>Risk Score:</strong> {fraudData.score}/100
-                        <div className="score-bar" style={{ marginTop: '8px', marginBottom: '8px' }}>
-                          <div
-                            className="score-fill"
-                            style={{
-                              width: `${fraudData.score}%`,
-                              backgroundColor: fraudData.score > 70 ? '#ef4444' : fraudData.score > 40 ? '#fbbf24' : '#22c55e',
-                              height: '8px'
-                            }}
-                          ></div>
+                {fraudData && (
+                  <div className="data-display slide-up" style={{ marginTop: '2rem', background: 'var(--bg-elevated)', borderRadius: '12px', padding: '1.5rem', border: '1px solid var(--border-neon)' }}>
+                    <h3 className="data-title" style={{ color: '#ef4444', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <AlertTriangle size={18} /> Fraud Report Retrieved
+                    </h3>
+                    <div className="data-block">
+                      {fraudData.score !== undefined && (
+                        <div>
+                          <strong>Risk Score:</strong> {fraudData.score}/100
+                          <div className="score-bar" style={{ marginTop: '8px', marginBottom: '8px' }}>
+                            <div
+                              className="score-fill"
+                              style={{
+                                width: `${fraudData.score}%`,
+                                backgroundColor: fraudData.score > 70 ? '#ef4444' : fraudData.score > 40 ? '#fbbf24' : '#22c55e',
+                                height: '8px'
+                              }}
+                            ></div>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                    {fraudData.reason && (
-                      <div style={{ marginTop: '12px' }}>
-                        <strong>Reason:</strong> {fraudData.reason}
-                      </div>
-                    )}
+                      )}
+                      {fraudData.reason && (
+                        <div style={{ marginTop: '12px' }}>
+                          <strong>Reason:</strong> {fraudData.reason}
+                        </div>
+                      )}
+                    </div>
+                    <div className="card-actions" style={{ marginTop: '1.5rem' }}>
+                      <button className="cyber-button" onClick={() => setFraudData(null)}>
+                        <span className="btn-icon"><Eraser size={16} /></span>
+                        Clear Result
+                      </button>
+                    </div>
                   </div>
-                  <div className="card-actions">
-                    <button className="btn-secondary" onClick={() => setFraudData(null)}>
-                      <span className="btn-icon">🧹</span>
-                      Clear Result
-                    </button>
+                )}
+              </div>
+            )}
+
+            {fraudSubTab === 'report' && (
+              <div className="form-section slide-up">
+                <div className="form-group">
+                  <label className="form-label">
+                    <span className="label-icon"><User size={16} /></span>
+                    Target Identifier
+                  </label>
+                  <input
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="Enter email or government ID"
+                    className="neon-input"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    <span className="label-icon"><AlertTriangle size={16} /></span>
+                    Fraud Score (0-100)
+                  </label>
+                  <input
+                    type="number"
+                    value={fraudScore}
+                    onChange={(e) => setFraudScore(e.target.value)}
+                    min="0"
+                    max="100"
+                    className="neon-input"
+                    placeholder="Enter risk score"
+                  />
+                  <div className="input-hint">
+                    <div className="score-indicator">
+                      <div className="score-bar">
+                        <div
+                          className="score-fill"
+                          style={{
+                            width: `${fraudScore}%`,
+                            backgroundColor: fraudScore > 70 ? '#ef4444' : fraudScore > 40 ? '#fbbf24' : '#22c55e'
+                          }}
+                        ></div>
+                      </div>
+                      <span className="score-text">{fraudScore}/100</span>
+                    </div>
                   </div>
                 </div>
-              )}
-            </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    <span className="label-icon">💬</span>
+                    Fraud Reason
+                  </label>
+                  <textarea
+                    value={fraudReason}
+                    onChange={(e) => setFraudReason(e.target.value)}
+                    placeholder="Describe suspicious behavior, unusual patterns, or evidence of fraud..."
+                    className="form-textarea neon-input"
+                    rows="4"
+                  />
+                </div>
+
+                <div className="card-actions" style={{ marginTop: '2rem' }}>
+                  <button className="cyber-button" onClick={() => wrapAction(handleReportFraud)} style={{ width: '100%', justifyContent: 'center', background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)', boxShadow: '0 8px 20px -5px rgba(244, 63, 94, 0.4)' }}>
+                    <span className="btn-icon"><AlertTriangle size={16} /></span>
+                    Submit Fraud Report
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {activeTab === 'governance' && (
-          <div className="governance-section">
-            {/* Proposal Creation Section */}
-            <div className="dashboard-card">
-              <div className="card-header">
-                <div className="card-icon">📜</div>
-                <h2 className="card-title">Create Proposal</h2>
-                <span className="card-badge governance">Governance</span>
+          <div className="cyber-card">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1.25rem', marginBottom: "1.5rem", borderBottom: "1px solid var(--border-muted)", paddingBottom: "1.5rem" }}>
+              <div className="card-icon" style={{ color: '#8b5cf6', background: 'rgba(139, 92, 246, 0.1)', padding: '0.75rem', borderRadius: '12px' }}><Scale size={32} /></div>
+              <div style={{ flexGrow: 1 }}>
+                <h2 className="cyber-heading">Network Governance</h2>
+                <p className="cyber-subheading" style={{ marginBottom: 0 }}>Participate directly in network governance by submitting, reviewing, and voting on proposals.</p>
               </div>
+              <span className="cyber-badge governance">Voting</span>
+            </div>
 
-              <div className="form-section">
+            <div className="horizontal-tabs" style={{ marginBottom: '2.5rem', display: 'inline-flex', padding: '0.5rem', background: 'rgba(0,0,0,0.4)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <button 
+                className={`horizontal-tab ${govSubTab === 'vote' ? 'active' : ''}`}
+                onClick={() => setGovSubTab('vote')}
+                style={{ padding: '0.6rem 1.2rem', fontSize: '0.95rem' }}
+              >
+                <Vote className="tab-icon" size={18} /> Review & Vote
+              </button>
+              <button 
+                className={`horizontal-tab ${govSubTab === 'create' ? 'active' : ''}`}
+                onClick={() => setGovSubTab('create')}
+                style={{ padding: '0.6rem 1.2rem', fontSize: '0.95rem' }}
+              >
+                <FileCode className="tab-icon" size={18} /> Submit Proposal
+              </button>
+              <button 
+                className={`horizontal-tab ${govSubTab === 'list' ? 'active' : ''}`}
+                onClick={() => setGovSubTab('list')}
+                style={{ padding: '0.6rem 1.2rem', fontSize: '0.95rem' }}
+              >
+                <ClipboardList className="tab-icon" size={18} /> All Proposals
+              </button>
+            </div>
+
+            {govSubTab === 'create' && (
+              <div className="form-section slide-up">
                 <div className="form-group">
                   <label className="form-label">
                     <span className="label-icon">🏛️</span>
@@ -698,15 +821,15 @@ function IssuerDashboard({ contract, onTxStatus }) {
                     onChange={(e) => setProposalType(e.target.value)}
                     className="form-select"
                   >
-                    <option value="issuer">🏢 Issuer Proposal</option>
-                    <option value="verifier">🔍 Verifier Proposal</option>
+                    <option value="issuer">Issuer Proposal</option>
+                    <option value="verifier">Verifier Proposal</option>
                   </select>
                 </div>
 
                 <div className="form-row">
                   <div className="form-group">
                     <label className="form-label">
-                      <span className="label-icon">🎯</span>
+                      <span className="label-icon"><Target size={16} /></span>
                       Target Address
                     </label>
                     <input
@@ -719,7 +842,7 @@ function IssuerDashboard({ contract, onTxStatus }) {
 
                   <div className="form-group">
                     <label className="form-label">
-                      <span className="label-icon">🏢</span>
+                      <span className="label-icon"><Building size={16} /></span>
                       Organization Name
                     </label>
                     <input
@@ -733,7 +856,7 @@ function IssuerDashboard({ contract, onTxStatus }) {
 
                 <div className="form-group">
                   <label className="form-label">
-                    <span className="label-icon">💬</span>
+                    <span className="label-icon"><MessageSquare size={16} /></span>
                     Justification
                   </label>
                   <textarea
@@ -747,7 +870,7 @@ function IssuerDashboard({ contract, onTxStatus }) {
 
                 <div className="form-group">
                   <label className="form-label">
-                    <span className="label-icon">🔗</span>
+                    <span className="label-icon"><LinkIcon size={16} /></span>
                     Evidence URI
                   </label>
                   <input
@@ -759,23 +882,16 @@ function IssuerDashboard({ contract, onTxStatus }) {
                 </div>
 
                 <div className="card-actions">
-                  <button className="btn-governance" onClick={() => wrapAction(handleCreateProposal)}>
-                    <span className="btn-icon">📜</span>
+                  <button className="cyber-button" onClick={() => wrapAction(handleCreateProposal)}>
+                    <span className="btn-icon"><FileText size={16} /></span>
                     Submit Proposal
                   </button>
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Proposal Management Section */}
-            <div className="dashboard-card">
-              <div className="card-header">
-                <div className="card-icon">⚖️</div>
-                <h2 className="card-title">Proposal Management</h2>
-                <span className="card-badge governance">Voting</span>
-              </div>
-
-              <div className="form-section">
+            {govSubTab === 'vote' && (
+              <div className="form-section slide-up">
                 <div className="form-group">
                   <label className="form-label">
                     <span className="label-icon">🏛️</span>
@@ -828,20 +944,20 @@ function IssuerDashboard({ contract, onTxStatus }) {
                 </div>
 
                 <div className="card-actions">
-                  <button className="btn-info" onClick={() => wrapAction(handleViewProposal)}>
-                    <span className="btn-icon">👁️</span>
+                  <button className="cyber-button" onClick={() => wrapAction(handleViewProposal)}>
+                    <span className="btn-icon"><Search size={16} /></span>
                     View Proposal
                   </button>
-                  <button className="btn-primary" onClick={() => wrapAction(handleVote)}>
-                    <span className="btn-icon">🗳️</span>
+                  <button className="cyber-button" onClick={() => wrapAction(handleVote)}>
+                    <span className="btn-icon"><Vote size={16} /></span>
                     Cast Vote
                   </button>
-                  <button className="btn-warning" onClick={() => wrapAction(handleCancelProposal)}>
-                    <span className="btn-icon">🚫</span>
+                  <button className="cyber-button" onClick={() => wrapAction(handleCancelProposal)}>
+                    <span className="btn-icon"><AlertTriangle size={16} /></span>
                     Cancel
                   </button>
-                  <button className="btn-secondary" onClick={() => wrapAction(handleExpireProposal)}>
-                    <span className="btn-icon">⏰</span>
+                  <button className="cyber-button" onClick={() => wrapAction(handleExpireProposal)}>
+                    <span className="btn-icon"><RefreshCw size={16} /></span>
                     Expire
                   </button>
                 </div>
@@ -853,23 +969,18 @@ function IssuerDashboard({ contract, onTxStatus }) {
                   </div>
                 )}
               </div>
-            </div>
+            )}
 
-            {/* All Proposals Section */}
-            <div className="dashboard-card full-width">
-              <div className="card-header">
-                <div className="card-icon">📋</div>
-                <h2 className="card-title">All Proposals</h2>
-                <span className="card-badge info">{filteredProposals.length} Showing</span>
-              </div>
+            {govSubTab === 'list' && (
+              <div className="form-section slide-up">
 
               <div className="card-actions proposal-list-toolbar">
                 <button
-                  className="btn-info"
+                  className="cyber-button"
                   onClick={() => wrapAction(handleLoadAllProposals)}
                   disabled={loadingProposals}
                 >
-                  <span className="btn-icon">{loadingProposals ? '⏳' : '🔄'}</span>
+                  <span className="btn-icon">{loadingProposals ? <RefreshCw size={16} /> : <Search size={16} />}</span>
                   {loadingProposals ? 'Loading...' : 'Load Proposals'}
                 </button>
                 <select
@@ -976,12 +1087,12 @@ function IssuerDashboard({ contract, onTxStatus }) {
                 </div>
               )}
             </div>
+            )}
           </div>
         )}
       </div>
-    </div>
+    </DashboardLayout>
   );
-
 }
 
 function ProposalCard({ item }) {

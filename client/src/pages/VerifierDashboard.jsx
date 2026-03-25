@@ -1,6 +1,15 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { hashIdentifier, sendTx } from "../utils/contract";
+import { 
+  ShieldCheck, 
+  ClipboardList, 
+  AlertTriangle, 
+  User, 
+  Search, 
+  FileText 
+} from "lucide-react";
+import DashboardLayout from "../layouts/DashboardLayout";
 
 function toDisplayJson(value) {
   return JSON.stringify(
@@ -69,7 +78,7 @@ function summarizeKycRecord(raw, queriedHash) {
     .map((item) => ({ ...item, value: formatValue(item.value) }));
 }
 
-function VerifierDashboard({ contract, onTxStatus }) {
+function VerifierDashboard({ contract, onTxStatus, walletProps, txStatus }) {
   const [identifier, setIdentifier] = useState("");
   const [kycData, setKycData] = useState(null);
   const [fraudData, setFraudData] = useState(null);
@@ -158,75 +167,53 @@ function VerifierDashboard({ contract, onTxStatus }) {
     }
   }
 
+  const sidebarItems = [
+    { id: 'kyc', label: 'KYC Verification', icon: ClipboardList },
+    { id: 'fraud', label: 'Fraud Review', icon: AlertTriangle },
+    { id: 'audit', label: 'Access Audit', icon: FileText },
+  ];
+
   return (
-    <div className="verifier-dashboard">
-      <div className="dashboard-header">
-        <div className="header-content">
-          <div className="header-icon">🔍</div>
-          <div>
-            <h1 className="dashboard-title">Verifier Dashboard</h1>
-            <p className="dashboard-subtitle">View KYC records, verify fraud status, and audit access logs</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Tab Navigation */}
-      <div className="tab-navigation">
-        <button
-          className={`tab-button ${activeTab === 'kyc' ? 'active' : ''}`}
-          onClick={() => setActiveTab('kyc')}
-        >
-          <span className="tab-icon">📋</span>
-          KYC Verification
-        </button>
-        <button
-          className={`tab-button ${activeTab === 'fraud' ? 'active' : ''}`}
-          onClick={() => setActiveTab('fraud')}
-        >
-          <span className="tab-icon">🚨</span>
-          Fraud Review
-        </button>
-        <button
-          className={`tab-button ${activeTab === 'audit' ? 'active' : ''}`}
-          onClick={() => setActiveTab('audit')}
-        >
-          <span className="tab-icon">📊</span>
-          Access Audit
-        </button>
-      </div>
-
-      {/* Tab Content */}
-      <div className="tab-content">
+    <DashboardLayout 
+      sidebarItems={sidebarItems} 
+      activeTab={activeTab} 
+      onTabChange={setActiveTab}
+      walletProps={walletProps}
+    >
+      <div className="tab-content slide-up">
         {/* KYC Verification Tab */}
         {activeTab === 'kyc' && (
-          <div className="dashboard-card">
-            <div className="card-header">
-              <div className="card-icon">📋</div>
-              <h2 className="card-title">KYC Verification</h2>
-              <span className="card-badge info">Lookup</span>
+          <div className="cyber-card">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1.25rem', marginBottom: "2rem", borderBottom: "1px solid var(--border-muted)", paddingBottom: "1.5rem" }}>
+              <div className="card-icon" style={{ color: '#06b6d4', background: 'rgba(6, 182, 212, 0.1)', padding: '0.75rem', borderRadius: '12px' }}><ClipboardList size={32} /></div>
+              <div style={{ flexGrow: 1 }}>
+                <h2 className="cyber-heading">KYC Verification</h2>
+                <p className="cyber-subheading">Lookup identity records submitted to the network.</p>
+              </div>
+              <span className="cyber-badge info">Lookup</span>
             </div>
 
             <div className="form-section">
               <div className="form-group">
                 <label className="form-label">
-                  <span className="label-icon">👤</span>
+                  <span className="label-icon"><User size={16} /></span>
                   User Identifier
                 </label>
                 <input
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   placeholder="Enter email or government ID"
-                  className="form-input"
+                  className="neon-input"
                 />
               </div>
 
               <div className="card-actions">
                 <button
-                  className="btn-primary"
+                  className="cyber-button"
                   onClick={handleViewKYC}
                   disabled={loadingKyc || !identifier.trim()}
                 >
-                  <span className="btn-icon">{loadingKyc ? '⏳' : '📋'}</span>
+                  <Search size={18} />
                   {loadingKyc ? 'Loading...' : 'View KYC Record'}
                 </button>
               </div>
@@ -250,7 +237,7 @@ function VerifierDashboard({ contract, onTxStatus }) {
 
               {!kycData && (
                 <div className="empty-state">
-                  <div className="empty-icon">📭</div>
+                  <div className="empty-icon"><FileText size={48} className="text-muted" /></div>
                   <p className="empty-text">No KYC data loaded</p>
                   <p className="empty-hint">Enter an identifier and click "View KYC Record" to retrieve data</p>
                 </div>
@@ -261,34 +248,37 @@ function VerifierDashboard({ contract, onTxStatus }) {
 
         {/* Fraud Review Tab */}
         {activeTab === 'fraud' && (
-          <div className="dashboard-card">
-            <div className="card-header">
-              <div className="card-icon">🚨</div>
-              <h2 className="card-title">Fraud Review</h2>
-              <span className="card-badge danger">Alert</span>
+          <div className="cyber-card">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1.25rem', marginBottom: "2rem", borderBottom: "1px solid var(--border-muted)", paddingBottom: "1.5rem" }}>
+              <div className="card-icon" style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem', borderRadius: '12px' }}><AlertTriangle size={32} /></div>
+              <div style={{ flexGrow: 1 }}>
+                <h2 className="cyber-heading">Fraud Review</h2>
+                <p className="cyber-subheading">Analyze flagged user reports and check risk scores.</p>
+              </div>
+              <span className="cyber-badge danger">Alert</span>
             </div>
 
             <div className="form-section">
               <div className="form-group">
                 <label className="form-label">
-                  <span className="label-icon">👤</span>
+                  <span className="label-icon"><User size={16} /></span>
                   User Identifier
                 </label>
                 <input
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   placeholder="Enter email or government ID"
-                  className="form-input"
+                  className="neon-input"
                 />
               </div>
 
               <div className="card-actions">
                 <button
-                  className="btn-danger"
+                  className="cyber-button"
                   onClick={handleViewFraud}
                   disabled={loadingFraud || !identifier.trim()}
                 >
-                  <span className="btn-icon">{loadingFraud ? '⏳' : '🚨'}</span>
+                  <ShieldCheck size={18} />
                   {loadingFraud ? 'Loading...' : 'Check Fraud Status'}
                 </button>
               </div>
@@ -319,7 +309,7 @@ function VerifierDashboard({ contract, onTxStatus }) {
 
               {!fraudData && (
                 <div className="empty-state">
-                  <div className="empty-icon">📭</div>
+                  <div className="empty-icon"><FileText size={48} className="text-muted" /></div>
                   <p className="empty-text">No fraud data loaded</p>
                   <p className="empty-hint">Enter an identifier and click "Check Fraud Status" to review</p>
                 </div>
@@ -330,34 +320,37 @@ function VerifierDashboard({ contract, onTxStatus }) {
 
         {/* Access Audit Tab */}
         {activeTab === 'audit' && (
-          <div className="dashboard-card">
-            <div className="card-header">
-              <div className="card-icon">📊</div>
-              <h2 className="card-title">Access Audit</h2>
-              <span className="card-badge info">Compliance</span>
+          <div className="cyber-card">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1.25rem', marginBottom: "2rem", borderBottom: "1px solid var(--border-muted)", paddingBottom: "1.5rem" }}>
+              <div className="card-icon" style={{ color: '#8b5cf6', background: 'rgba(139, 92, 246, 0.1)', padding: '0.75rem', borderRadius: '12px' }}><FileText size={32} /></div>
+              <div style={{ flexGrow: 1 }}>
+                <h2 className="cyber-heading">Access Audit</h2>
+                <p className="cyber-subheading">View logging and tracking of network audits.</p>
+              </div>
+              <span className="cyber-badge info">Compliance</span>
             </div>
 
             <div className="form-section">
               <div className="form-group">
                 <label className="form-label">
-                  <span className="label-icon">👤</span>
+                  <span className="label-icon"><User size={16} /></span>
                   User Identifier
                 </label>
                 <input
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   placeholder="Enter email or government ID"
-                  className="form-input"
+                  className="neon-input"
                 />
               </div>
 
               <div className="card-actions">
                 <button
-                  className="btn-info"
+                  className="cyber-button"
                   onClick={handleViewAccessLogs}
                   disabled={loadingLogs || !identifier.trim()}
                 >
-                  <span className="btn-icon">{loadingLogs ? '⏳' : '📜'}</span>
+                  <FileText size={18} />
                   {loadingLogs ? 'Loading...' : 'View Access Logs'}
                 </button>
               </div>
@@ -377,7 +370,7 @@ function VerifierDashboard({ contract, onTxStatus }) {
 
               {!accessLogs && (
                 <div className="empty-state">
-                  <div className="empty-icon">📭</div>
+                  <div className="empty-icon"><FileText size={48} className="text-muted" /></div>
                   <p className="empty-text">No access logs loaded</p>
                   <p className="empty-hint">Enter an identifier and click "View Access Logs" to review compliance history</p>
                 </div>
@@ -386,7 +379,7 @@ function VerifierDashboard({ contract, onTxStatus }) {
           </div>
         )}
       </div>
-    </div>
+    </DashboardLayout>
   );
 }
 
