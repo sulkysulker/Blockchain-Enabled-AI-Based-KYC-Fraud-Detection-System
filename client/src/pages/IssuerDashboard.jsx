@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { hashIdentifier, sendTx } from "../utils/contract";
-import { mirrorFraudReport, uploadKycMetadata } from "../utils/api";
+import { mirrorFraudReport, uploadKycMetadata, getOffChainKyc } from "../utils/api";
 import { 
   Building, 
   ClipboardList, 
@@ -23,7 +23,9 @@ import {
   Vote,
   RefreshCw,
   Eraser,
-  UserPlus
+  UserPlus,
+  Database,
+  ExternalLink
 } from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
 
@@ -159,6 +161,7 @@ function IssuerDashboard({ contract, onTxStatus, walletProps, txStatus }) {
   const [loadingFraud, setLoadingFraud] = useState(false);
   const [proposals, setProposals] = useState([]);
   const [loadingProposals, setLoadingProposals] = useState(false);
+  const [offChainData, setOffChainData] = useState(null);
 
   const kycHash = useMemo(() => (identifier ? hashIdentifier(identifier) : ""), [identifier]);
 
@@ -176,9 +179,21 @@ function IssuerDashboard({ contract, onTxStatus, walletProps, txStatus }) {
 
   async function handleGetKYC() {
     setLoadingKycRecord(true);
+    setOffChainData(null);
     try {
       const result = await contract.getKYC(kycHash);
       setKycRecord(result);
+      
+      // Fetch off-chain metadata
+      try {
+        const offChain = await getOffChainKyc(kycHash);
+        if (offChain?.data) {
+          setOffChainData(offChain.data);
+        }
+      } catch (err) {
+        console.info("No off-chain metadata found for this hash.");
+      }
+
       // Log access automatically for compliance
       try {
         await contract.logAccess(kycHash);
@@ -598,8 +613,48 @@ function IssuerDashboard({ contract, onTxStatus, walletProps, txStatus }) {
                         <div style={{ color: 'var(--accent-rose)' }}>No valid data found on-chain.</div>
                       )}
                     </div>
+
+                    {offChainData && (
+                      <div className="data-block offchain-block slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-neon)' }}>
+                        <h4 style={{ color: 'var(--accent-purple)', margin: '0 0 0.5rem', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <Database size={18} /> Off-Chain Metadata
+                        </h4>
+                        
+                        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-muted)', paddingBottom: '0.5rem' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Original Identifier:</span>
+                          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{offChainData.originalIdentifier}</span>
+                        </div>
+                        
+                        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-muted)', paddingBottom: '0.5rem' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Identity Type:</span>
+                          <span style={{ fontWeight: 600, color: 'var(--text-primary)', textTransform: 'capitalize' }}>{offChainData.identifierType}</span>
+                        </div>
+
+                        {offChainData.metadata && Object.entries(offChainData.metadata).map(([key, val]) => (
+                          <div key={key} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-muted)', paddingBottom: '0.5rem' }}>
+                            <span style={{ color: 'var(--text-secondary)' }}>Metadata ({key}):</span>
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{String(val)}</span>
+                          </div>
+                        ))}
+
+                        {offChainData.ipfsCid && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', marginTop: '0.25rem' }}>
+                            <span style={{ color: 'var(--text-secondary)' }}>Attached Document:</span>
+                            <a 
+                              href={`https://gateway.pinata.cloud/ipfs/${offChainData.ipfsCid}`} 
+                              target="_blank" 
+                              rel="noreferrer"
+                              style={{ color: 'var(--accent-blue)', fontWeight: 'bold', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                            >
+                              View on IPFS <ExternalLink size={14} />
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="card-actions" style={{ marginTop: '1.5rem' }}>
-                      <button className="cyber-button" onClick={() => setKycRecord(null)} style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
+                      <button className="cyber-button" onClick={() => { setKycRecord(null); setOffChainData(null); }} style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
                         <span className="btn-icon"><RefreshCw size={16} /></span> Clear Output
                       </button>
                     </div>
