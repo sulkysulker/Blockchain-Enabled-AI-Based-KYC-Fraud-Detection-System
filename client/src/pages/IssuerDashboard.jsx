@@ -321,39 +321,37 @@ function IssuerDashboard({ contract, onTxStatus, walletProps, txStatus }) {
 
       if (total === 0) return [];
 
-      // Fetch all proposals
-      const items = await Promise.all(
-        Array.from({ length: total }, async (_, index) => {
-          let id = index;
-          let raw;
-
-          try {
-            // Try 0-based index first
-            try {
-              raw = await contract[fetchMethodName](id);
-            } catch (err) {
-              // Fallback to 1-based index
-              id = index + 1;
-              raw = await contract[fetchMethodName](id);
-            }
-
-            return {
-              id,
-              type,
-              ...raw,
-              statusLabel: proposalStatusLabel(raw.status)
-            };
-          } catch (err) {
-            console.warn(`Skipping invalid ${type} proposal at index ${index}:`, err.message);
-            return null;
-          }
-        })
-      );
-
-      // Keep all valid proposals; filter in UI.
-      return items
-        .filter((item) => item !== null)
-        .map((item) => normalizeProposal(item, item.id, type));
+      // Exhaustively fetch 0 through total (inclusive).
+      // This bulletproofs against both 0-based and 1-based index offsets used by different Solidity mappings
+      // by simply grabbing the full spectrum and evicting any empty EVM struct responses.
+      const fetchPromises = [];
+      for (let i = 0; i <= total; i++) {
+        fetchPromises.push(
+          contract[fetchMethodName](i).then(raw => {
+             return { id: i, type, raw };
+          }).catch(err => null)
+        );
+      }
+      
+      const rawItems = await Promise.all(fetchPromises);
+      
+      const validItems = [];
+      for (const item of rawItems) {
+        if (!item || !item.raw) continue;
+        
+        const normalized = normalizeProposal(item.raw, item.id, type);
+        
+        // Evict empty/default structs returned by the EVM for uninitialized index mappings
+        if (!normalized.proposedTarget || 
+            normalized.proposedTarget === "0x0000000000000000000000000000000000000000" || 
+            normalized.organizationName === "") {
+            continue;
+        }
+        
+        validItems.push(normalized);
+      }
+      
+      return validItems;
     } catch (error) {
       console.error(`Error fetching ${type} proposals:`, error);
       return [];
