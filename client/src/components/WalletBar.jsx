@@ -1,11 +1,21 @@
+import { useState, useEffect } from "react";
 import { SEPOLIA_CHAIN_ID_HEX } from "../utils/connectWallet";
 
 function WalletBar({ account, roleLabel, chainId, onConnect, onSwitchNetwork }) {
+  const [isScrolled, setIsScrolled] = useState(false);
   const isSepolia = (chainId || "").toLowerCase() === SEPOLIA_CHAIN_ID_HEX;
   const isConnected = !!account;
 
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 80);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   return (
-    <header className="wallet-bar">
+    <header className={`wallet-bar ${isScrolled ? 'wallet-bar--compact' : ''}`}>
       <div className="brand-section">
         <div className="brand-logo">
           <span className="logo-icon">🔗</span>

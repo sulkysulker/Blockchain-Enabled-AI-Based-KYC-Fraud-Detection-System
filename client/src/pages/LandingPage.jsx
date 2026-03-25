@@ -8,7 +8,8 @@ import {
   FileCheck,
   LockKeyhole,
   Activity,
-  ArrowRight
+  ArrowRight,
+  ShieldAlert
 } from 'lucide-react';
 import NasaParticles from '../components/Nasa';
 import WalletBar from '../components/WalletBar';
@@ -55,6 +56,13 @@ export default function LandingPage({ account, walletProps, children }) {
             <div className="stat-info">
               <span className="stat-value">Real-time</span>
               <span className="stat-label">Verification</span>
+            </div>
+          </div>
+          <div className="stat-card glassmorphism">
+            <ShieldAlert className="stat-icon" />
+            <div className="stat-info">
+              <span className="stat-value">Zero-Trust</span>
+              <span className="stat-label">Fraud Detection</span>
             </div>
           </div>
         </div>
