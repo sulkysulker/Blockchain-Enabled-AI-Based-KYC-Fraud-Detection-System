@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import WalletBar from "./components/WalletBar";
 import TxStatus from "./components/TxStatus";
-import AdminDashboard from "./pages/AdminDashboard";
+import AdminIssuerDashboard from "./pages/AdminIssuerDashboard";
 import IssuerDashboard from "./pages/IssuerDashboard";
 import VerifierDashboard from "./pages/VerifierDashboard";
 import LandingPage from "./pages/LandingPage";
@@ -206,7 +206,7 @@ function App() {
                   ) : !contract ? (
                     <div className="notice page-notice" style={{ marginTop: "5vh", marginInline: "auto", maxWidth: "400px" }}>Initializing contract...</div>
                   ) : roles.admin ? (
-                    <AdminDashboard contract={contract} onTxStatus={setTxStatus} walletProps={walletProps} txStatus={txStatus} />
+                    <AdminIssuerDashboard contract={contract} onTxStatus={setTxStatus} walletProps={walletProps} txStatus={txStatus} />
                   ) : roles.issuer ? (
                     <IssuerDashboard contract={contract} onTxStatus={setTxStatus} walletProps={walletProps} txStatus={txStatus} />
                   ) : roles.verifier ? (
