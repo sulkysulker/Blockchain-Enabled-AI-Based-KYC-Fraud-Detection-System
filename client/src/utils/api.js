@@ -2,7 +2,7 @@ import axios from "axios";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_BACKEND_URL || "http://localhost:5000",
-  timeout: 20000
+  timeout: 20000,
 });
 
 export async function uploadKycMetadata(payload) {
@@ -18,7 +18,7 @@ export async function uploadKycMetadata(payload) {
   }
 
   const { data } = await api.post("/kyc/upload", formData, {
-    headers: { "Content-Type": "multipart/form-data" }
+    headers: { "Content-Type": "multipart/form-data" },
   });
   return data;
 }
