@@ -1,15 +1,21 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { hashIdentifier, sendTx } from "../utils/contract";
+import { getOffChainKyc } from "../utils/api";
 import { 
   ShieldCheck, 
   ClipboardList, 
   AlertTriangle, 
   User, 
   Search, 
-  FileText 
+  FileText,
+  Database,
+  ExternalLink,
+  CheckCircle,
+  RefreshCw
 } from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
+import FooterStats from "../components/FooterStats";
 
 function toDisplayJson(value) {
   return JSON.stringify(
@@ -81,12 +87,11 @@ function summarizeKycRecord(raw, queriedHash) {
 function VerifierDashboard({ contract, onTxStatus, walletProps, txStatus }) {
   const [identifier, setIdentifier] = useState("");
   const [kycData, setKycData] = useState(null);
+  const [offChainData, setOffChainData] = useState(null);
   const [fraudData, setFraudData] = useState(null);
-  const [accessLogs, setAccessLogs] = useState(null);
   const [activeTab, setActiveTab] = useState('kyc');
   const [loadingKyc, setLoadingKyc] = useState(false);
   const [loadingFraud, setLoadingFraud] = useState(false);
-  const [loadingLogs, setLoadingLogs] = useState(false);
   const queriedHash = identifier.trim() ? hashIdentifier(identifier) : "";
   const kycSummary = summarizeKycRecord(kycData, queriedHash);
 
@@ -97,15 +102,21 @@ function VerifierDashboard({ contract, onTxStatus, walletProps, txStatus }) {
   async function handleViewKYC() {
     try {
       setLoadingKyc(true);
+      setOffChainData(null);
       const hash = getHash();
       const result = await contract.getKYC(hash);
       setKycData(result);
-      // Log access automatically for compliance
+      
+      // Fetch off-chain metadata
       try {
-        await contract.logAccess(hash);
-      } catch (error) {
-        console.warn("Access log failed silently:", error?.message);
+        const offChain = await getOffChainKyc(hash);
+        if (offChain?.data) {
+          setOffChainData(offChain.data);
+        }
+      } catch (err) {
+        console.info("No off-chain metadata found for this hash.");
       }
+      
       toast.success("KYC data loaded successfully");
     } catch (error) {
       toast.error(error?.message || "Unable to fetch KYC");
@@ -127,24 +138,13 @@ function VerifierDashboard({ contract, onTxStatus, walletProps, txStatus }) {
     }
   }
 
-  async function handleViewAccessLogs() {
-    try {
-      setLoadingLogs(true);
-      const hash = getHash();
-      const logs = await contract.getAccessLogs(hash);
-      setAccessLogs(logs);
-      toast.success("Access logs loaded successfully");
-    } catch (error) {
-      toast.error(error?.message || "Unable to fetch logs");
-    } finally {
-      setLoadingLogs(false);
-    }
-  }
+
 
 
   async function handleViewFraud() {
     try {
       setLoadingFraud(true);
+      setFraudData(null);
       const hash = getHash();
       const result = await contract.getFraud(hash);
       // Convert Result object to plain object, handling both numeric indices and named properties
@@ -153,15 +153,15 @@ function VerifierDashboard({ contract, onTxStatus, walletProps, txStatus }) {
         reason: result?.reason !== undefined ? result.reason : (result?.[1] !== undefined ? result[1] : "")
       };
       setFraudData(fraudReport);
-      // Log access automatically for compliance
-      try {
-        await contract.logAccess(hash);
-      } catch (error) {
-        console.warn("Access log failed silently:", error?.message);
-      }
       toast.success("Fraud data loaded successfully");
     } catch (error) {
-      toast.error(error?.message || "Unable to fetch fraud data");
+      // If no fraud record exists, show a friendly message
+      if (error?.message?.includes("not found")) {
+        toast.info("No fraud record found for this user");
+        setFraudData({ score: 0, reason: "No fraud record - User is clean" });
+      } else {
+        toast.error(error?.message || "Unable to fetch fraud data");
+      }
     } finally {
       setLoadingFraud(false);
     }
@@ -170,7 +170,6 @@ function VerifierDashboard({ contract, onTxStatus, walletProps, txStatus }) {
   const sidebarItems = [
     { id: 'kyc', label: 'KYC Verification', icon: ClipboardList },
     { id: 'fraud', label: 'Fraud Review', icon: AlertTriangle },
-    { id: 'audit', label: 'Access Audit', icon: FileText },
   ];
 
   return (
@@ -219,18 +218,68 @@ function VerifierDashboard({ contract, onTxStatus, walletProps, txStatus }) {
               </div>
 
               {kycData && (
-                <div className="data-display">
-                  <h3 className="data-title">On-Chain KYC Record</h3>
-                  <div className="data-block">
+                <div className="data-display slide-up">
+                  <h3 className="data-title" style={{ color: 'var(--accent-cyan)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <CheckCircle size={18} /> Record Retrieved
+                  </h3>
+                  <div className="data-block" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {kycSummary.length ? (
                       kycSummary.map((item) => (
-                        <div key={item.label}>
-                          <strong>{item.label}:</strong> {item.value}
+                        <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-muted)', paddingBottom: '0.5rem' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>{item.label}:</span>
+                          <span className={item.label === 'Hash' || item.label === 'Issuer' ? 'mono-value' : ''} style={{ fontWeight: 600, color: 'var(--text-primary)', textAlign: 'right', maxWidth: '60%', wordBreak: 'break-all' }}>
+                            {item.value}
+                          </span>
                         </div>
                       ))
                     ) : (
-                      <div>No labeled fields detected for this contract response.</div>
+                      <div style={{ color: 'var(--accent-rose)' }}>No valid data found on-chain.</div>
                     )}
+                  </div>
+
+                  {offChainData && (
+                    <div className="data-block offchain-block slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-neon)' }}>
+                      <h4 style={{ color: 'var(--accent-purple)', margin: '0 0 0.5rem', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Database size={18} /> Off-Chain Metadata
+                      </h4>
+                      
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-muted)', paddingBottom: '0.5rem' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Original Identifier:</span>
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{offChainData.originalIdentifier}</span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-muted)', paddingBottom: '0.5rem' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Identity Type:</span>
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)', textTransform: 'capitalize' }}>{offChainData.identifierType}</span>
+                      </div>
+
+                      {offChainData.metadata && Object.entries(offChainData.metadata).map(([key, val]) => (
+                        <div key={key} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-muted)', paddingBottom: '0.5rem' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Metadata ({key}):</span>
+                          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{String(val)}</span>
+                        </div>
+                      ))}
+
+                      {offChainData.ipfsCid && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', marginTop: '0.25rem' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Attached Document:</span>
+                          <a 
+                            href={`https://gateway.pinata.cloud/ipfs/${offChainData.ipfsCid}`} 
+                            target="_blank" 
+                            rel="noreferrer"
+                            style={{ color: 'var(--accent-blue)', fontWeight: 'bold', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                          >
+                            View on IPFS <ExternalLink size={14} />
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="card-actions" style={{ marginTop: '1.5rem' }}>
+                    <button className="cyber-button" onClick={() => { setKycData(null); setOffChainData(null); }} style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
+                      <span className="btn-icon"><RefreshCw size={16} /></span> Clear Output
+                    </button>
                   </div>
                 </div>
               )}
@@ -284,8 +333,10 @@ function VerifierDashboard({ contract, onTxStatus, walletProps, txStatus }) {
               </div>
 
               {fraudData && (
-                <div className="data-display fraud-review">
-                  <h3 className="data-title">Fraud Report</h3>
+                <div className="data-display fraud-review slide-up">
+                  <h3 className="data-title" style={{ color: 'var(--accent-rose)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <ShieldCheck size={18} /> Fraud Report
+                  </h3>
                   <div className="fraud-content">
                     {fraudData.score !== undefined && (
                       <div className="fraud-score">
@@ -304,6 +355,11 @@ function VerifierDashboard({ contract, onTxStatus, walletProps, txStatus }) {
                     )}
                   </div>
                   <pre className="data-block">{toDisplayJson(fraudData)}</pre>
+                  <div className="card-actions" style={{ marginTop: '1rem' }}>
+                    <button className="cyber-button" onClick={() => { setFraudData(null); }} style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
+                      <span className="btn-icon"><RefreshCw size={16} /></span> Clear Output
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -318,67 +374,9 @@ function VerifierDashboard({ contract, onTxStatus, walletProps, txStatus }) {
           </div>
         )}
 
-        {/* Access Audit Tab */}
-        {activeTab === 'audit' && (
-          <div className="cyber-card">
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1.25rem', marginBottom: "2rem", borderBottom: "1px solid var(--border-muted)", paddingBottom: "1.5rem" }}>
-              <div className="card-icon" style={{ color: '#8b5cf6', background: 'rgba(139, 92, 246, 0.1)', padding: '0.75rem', borderRadius: '12px' }}><FileText size={32} /></div>
-              <div style={{ flexGrow: 1 }}>
-                <h2 className="cyber-heading">Access Audit</h2>
-                <p className="cyber-subheading">View logging and tracking of network audits.</p>
-              </div>
-              <span className="cyber-badge info">Compliance</span>
-            </div>
 
-            <div className="form-section">
-              <div className="form-group">
-                <label className="form-label">
-                  <span className="label-icon"><User size={16} /></span>
-                  User Identifier
-                </label>
-                <input
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="Enter email or government ID"
-                  className="neon-input"
-                />
-              </div>
-
-              <div className="card-actions">
-                <button
-                  className="cyber-button"
-                  onClick={handleViewAccessLogs}
-                  disabled={loadingLogs || !identifier.trim()}
-                >
-                  <FileText size={18} />
-                  {loadingLogs ? 'Loading...' : 'View Access Logs'}
-                </button>
-              </div>
-
-              {accessLogs && (
-                <div className="data-display">
-                  <h3 className="data-title">Access History</h3>
-                  <div className="logs-summary">
-                    <div className="summary-item">
-                      <span className="summary-label">Total Accesses:</span>
-                      <span className="summary-value">{accessLogs.length || 0}</span>
-                    </div>
-                  </div>
-                  <pre className="data-block">{toDisplayJson(accessLogs)}</pre>
-                </div>
-              )}
-
-              {!accessLogs && (
-                <div className="empty-state">
-                  <div className="empty-icon"><FileText size={48} className="text-muted" /></div>
-                  <p className="empty-text">No access logs loaded</p>
-                  <p className="empty-hint">Enter an identifier and click "View Access Logs" to review compliance history</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
+      <FooterStats contract={contract} />
     </DashboardLayout>
   );
 }

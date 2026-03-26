@@ -59,3 +59,12 @@ export async function getKycByHash(req, res) {
     return res.status(500).json({ message: error.message || "Fetch failed." });
   }
 }
+
+export async function getKycCount(req, res) {
+  try {
+    const count = await KycRecord.countDocuments();
+    return res.status(200).json({ count });
+  } catch (error) {
+    return res.status(500).json({ message: error.message || "Count failed." });
+  }
+}

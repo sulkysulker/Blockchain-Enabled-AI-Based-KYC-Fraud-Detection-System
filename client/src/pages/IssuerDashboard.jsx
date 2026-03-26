@@ -28,6 +28,7 @@ import {
   ExternalLink
 } from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
+import FooterStats from "../components/FooterStats";
 
 function toDisplayJson(value) {
   return JSON.stringify(
@@ -290,14 +291,7 @@ function IssuerDashboard({ contract, onTxStatus, walletProps, txStatus }) {
     toast.success(`Proposal cancelled: ${receipt.hash}`);
   }
 
-  async function handleExpireProposal() {
-    const txPromise =
-      proposalType === "issuer"
-        ? contract.expireIssuerProposal(Number(proposalId))
-        : contract.expireVerifierProposal(Number(proposalId));
-    const receipt = await sendTx(txPromise, onTxStatus);
-    toast.success(`Proposal expired: ${receipt.hash}`);
-  }
+
 
   async function fetchProposalsByType(type) {
     try {
@@ -406,7 +400,6 @@ function IssuerDashboard({ contract, onTxStatus, walletProps, txStatus }) {
         handleViewProposal,
         handleVote,
         handleCancelProposal,
-        handleExpireProposal,
         handleLoadAllProposals
       ];
       if (!identifier.trim() && !noIdentifierNeeded.includes(fn)) {
@@ -1009,10 +1002,7 @@ function IssuerDashboard({ contract, onTxStatus, walletProps, txStatus }) {
                     <span className="btn-icon"><AlertTriangle size={16} /></span>
                     Cancel
                   </button>
-                  <button className="cyber-button" onClick={() => wrapAction(handleExpireProposal)}>
-                    <span className="btn-icon"><RefreshCw size={16} /></span>
-                    Expire
-                  </button>
+
                 </div>
 
                 {proposalData && (
@@ -1046,7 +1036,6 @@ function IssuerDashboard({ contract, onTxStatus, walletProps, txStatus }) {
                   <option value="0">Active</option>
                   <option value="1">Executed</option>
                   <option value="2">Rejected</option>
-                  <option value="3">Cancelled</option>
                   <option value="4">Expired</option>
                 </select>
               </div>
@@ -1144,6 +1133,7 @@ function IssuerDashboard({ contract, onTxStatus, walletProps, txStatus }) {
           </div>
         )}
       </div>
+      <FooterStats contract={contract} />
     </DashboardLayout>
   );
 }
